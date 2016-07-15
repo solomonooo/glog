@@ -368,6 +368,11 @@ DECLARE_string(log_dir);
 // Set the log file mode.
 DECLARE_int32(logfile_mode);
 
+//log split
+DECLARE_int32(logsplittype);
+DECLARE_int32(logsplitvalue);
+
+
 // Sets the path of the directory into which to put additional links
 // to the log files.
 DECLARE_string(log_link);

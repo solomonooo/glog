@@ -161,6 +161,9 @@ WallTime WallTime_Now();
 int32 GetMainThreadPid();
 bool PidHasChanged();
 
+time_t GetCurrentSplitTime();
+bool TimeHasChanged();
+
 pid_t GetTID();
 
 const std::string& MyUserName();

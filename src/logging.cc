@@ -151,6 +151,10 @@ GLOG_DEFINE_int32(logemaillevel, 999,
 GLOG_DEFINE_string(logmailer, "/bin/mail",
                    "Mailer used to send logging email");
 
+//type : 0, none; 1, min; 2, hour; 3, day 
+GLOG_DEFINE_int32(logsplittype, 2, "the type of log split. 0, not split; 1, split by min; 2, split by hour; 3, split by day");
+GLOG_DEFINE_int32(logsplitvalue, 1, "the value of log split, depends flag logsplittype");
+
 // Compute the default value for --log_dir
 static const char* DefaultLogDir() {
   const char* env;
@@ -378,7 +382,7 @@ int64 LogMessage::num_messages_[NUM_SEVERITIES] = {0, 0, 0, 0};
 static bool stop_writing = false;
 
 const char*const LogSeverityNames[NUM_SEVERITIES] = {
-  "INFO", "WARNING", "ERROR", "FATAL"
+  "INFO", "WARN", "ERROR", "FATAL"
 };
 
 // Has the user called SetExitOnDFatal(true)?
@@ -905,7 +909,7 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
   string string_filename = base_filename_+filename_extension_+
                            time_pid_string;
   const char* filename = string_filename.c_str();
-  int fd = open(filename, O_WRONLY | O_CREAT | O_EXCL, FLAGS_logfile_mode);
+  int fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, FLAGS_logfile_mode);
   if (fd == -1) return false;
 #ifdef HAVE_FCNTL
   // Mark the file close-on-exec. We don't really care if this fails
@@ -972,7 +976,7 @@ void LogFileObject::Write(bool force_flush,
   }
 
   if (static_cast<int>(file_length_ >> 20) >= MaxLogSize() ||
-      PidHasChanged()) {
+      TimeHasChanged()) {
     if (file_ != NULL) fclose(file_);
     file_ = NULL;
     file_length_ = bytes_since_flush_ = 0;
@@ -987,21 +991,24 @@ void LogFileObject::Write(bool force_flush,
     if (++rollover_attempt_ != kRolloverAttemptFrequency) return;
     rollover_attempt_ = 0;
 
+	time_t splittime = GetCurrentSplitTime();
     struct ::tm tm_time;
-    localtime_r(&timestamp, &tm_time);
+    localtime_r(&splittime, &tm_time);
 
     // The logfile's filename will have the date/time & pid in it
     ostringstream time_pid_stream;
     time_pid_stream.fill('0');
     time_pid_stream << 1900+tm_time.tm_year
-                    << setw(2) << 1+tm_time.tm_mon
-                    << setw(2) << tm_time.tm_mday
-                    << '-'
-                    << setw(2) << tm_time.tm_hour
-                    << setw(2) << tm_time.tm_min
-                    << setw(2) << tm_time.tm_sec
-                    << '.'
-                    << GetMainThreadPid();
+                    << setw(2) << 1+tm_time.tm_mon;
+	if(FLAGS_logsplittype <= 3){
+		time_pid_stream << setw(2) << tm_time.tm_mday;
+	}
+	if(FLAGS_logsplittype <= 2){
+		time_pid_stream << setw(2) << tm_time.tm_hour;
+	}
+	if(FLAGS_logsplittype <= 1){
+		time_pid_stream << setw(2) << tm_time.tm_min;
+	}
     const string& time_pid_string = time_pid_stream.str();
 
     if (base_filename_selected_) {
@@ -1035,8 +1042,7 @@ void LogFileObject::Write(bool force_flush,
       // deadlock. Simply use a name like invalid-user.
       if (uidname.empty()) uidname = "invalid-user";
 
-      stripped_filename = stripped_filename+'.'+hostname+'.'
-                          +uidname+".log."
+      stripped_filename = stripped_filename+".log."
                           +LogSeverityNames[severity_]+'.';
       // We're going to (potentially) try to put logs in several different dirs
       const vector<string> & log_dirs = GetLoggingDirectories();
@@ -1066,17 +1072,15 @@ void LogFileObject::Write(bool force_flush,
     ostringstream file_header_stream;
     file_header_stream.fill('0');
     file_header_stream << "Log file created at: "
-                       << 1900+tm_time.tm_year << '/'
-                       << setw(2) << 1+tm_time.tm_mon << '/'
+                       << 1900+tm_time.tm_year << '-'
+                       << setw(2) << 1+tm_time.tm_mon << '-'
                        << setw(2) << tm_time.tm_mday
                        << ' '
                        << setw(2) << tm_time.tm_hour << ':'
                        << setw(2) << tm_time.tm_min << ':'
-                       << setw(2) << tm_time.tm_sec << '\n'
+                       << setw(2) << tm_time.tm_sec << ' '
                        << "Running on machine: "
-                       << LogDestination::hostname() << '\n'
-                       << "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu "
-                       << "threadid file:line] msg" << '\n';
+                       << LogDestination::hostname() << '\n';
     const string& file_header_string = file_header_stream.str();
 
     const int header_len = file_header_string.size();
@@ -1236,8 +1240,10 @@ void LogMessage::Init(const char* file,
   //    (log level, GMT month, date, time, thread_id, file basename, line)
   // We exclude the thread_id for the default thread.
   if (FLAGS_log_prefix && (line != kNoLogPrefix)) {
-    stream() << LogSeverityNames[severity][0]
-             << setw(2) << 1+data_->tm_time_.tm_mon
+    stream() << LogSeverityNames[severity]
+			 << ' '
+			 << setw(4) << 1900+data_->tm_time_.tm_year << '-'
+             << setw(2) << 1+data_->tm_time_.tm_mon << '-'
              << setw(2) << data_->tm_time_.tm_mday
              << ' '
              << setw(2) << data_->tm_time_.tm_hour  << ':'
@@ -1248,7 +1254,7 @@ void LogMessage::Init(const char* file,
              << setfill(' ') << setw(5)
              << static_cast<unsigned int>(GetTID()) << setfill('0')
              << ' '
-             << data_->basename_ << ':' << data_->line_ << "] ";
+             << data_->basename_ << ':' << data_->line_ << "> ";
   }
   data_->num_prefix_chars_ = data_->stream_.pcount();
 

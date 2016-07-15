@@ -237,6 +237,47 @@ bool PidHasChanged() {
   return true;
 }
 
+static time_t g_current_time = 0;
+time_t GetCurrentSplitTime() {
+	return g_current_time;
+}
+
+bool TimeHasChanged(){
+	time_t now = time(NULL);
+	struct ::tm tm_now;
+	localtime_r(&now, &tm_now);
+
+	int offset = 0;
+	if(0 == FLAGS_logsplittype || 0 == FLAGS_logsplitvalue){
+		g_current_time = now;
+		return false;
+	}else if(1 == FLAGS_logsplittype){
+		//min
+		tm_now.tm_min = (int)(tm_now.tm_min / FLAGS_logsplitvalue) * FLAGS_logsplitvalue;
+		offset = 60 * FLAGS_logsplitvalue;
+	}else if(2 == FLAGS_logsplittype){
+		//hour
+		tm_now.tm_hour = (int)(tm_now.tm_hour / FLAGS_logsplitvalue) * FLAGS_logsplitvalue;
+		tm_now.tm_min = 0;
+		tm_now.tm_sec = 0;
+		offset = 60 * 60 * FLAGS_logsplitvalue;
+	}else if(3 == FLAGS_logsplittype){
+		//day
+		tm_now.tm_mday = (int)(tm_now.tm_mday / FLAGS_logsplitvalue) * FLAGS_logsplitvalue;
+		tm_now.tm_hour = 0;
+		tm_now.tm_min = 0;
+		tm_now.tm_sec = 0;
+		offset = 24 * 60 * 60 * FLAGS_logsplitvalue;
+	}
+	now = mktime(&tm_now);
+	if(0 == offset || now - g_current_time < offset){
+		return false;
+	}
+
+	g_current_time = now;
+	return true;
+}
+
 pid_t GetTID() {
   // On Linux and MacOSX, we try to use gettid().
 #if defined OS_LINUX || defined OS_MACOSX
