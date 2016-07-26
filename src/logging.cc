@@ -976,7 +976,7 @@ void LogFileObject::Write(bool force_flush,
   }
 
   if (static_cast<int>(file_length_ >> 20) >= MaxLogSize() ||
-      TimeHasChanged()) {
+      TimeHasChanged(severity_)) {
     if (file_ != NULL) fclose(file_);
     file_ = NULL;
     file_length_ = bytes_since_flush_ = 0;
@@ -991,7 +991,7 @@ void LogFileObject::Write(bool force_flush,
     if (++rollover_attempt_ != kRolloverAttemptFrequency) return;
     rollover_attempt_ = 0;
 
-	time_t splittime = GetCurrentSplitTime();
+	time_t splittime = GetCurrentSplitTime(severity_);
     struct ::tm tm_time;
     localtime_r(&splittime, &tm_time);
 

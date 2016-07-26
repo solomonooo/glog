@@ -237,19 +237,22 @@ bool PidHasChanged() {
   return true;
 }
 
-static time_t g_current_time = 0;
-time_t GetCurrentSplitTime() {
-	return g_current_time;
+static time_t g_current_time[NUM_SEVERITIES] = {0, 0, 0, 0};
+time_t GetCurrentSplitTime(int severity) {
+	return severity < NUM_SEVERITIES ? g_current_time[severity] : 0;
 }
 
-bool TimeHasChanged(){
+bool TimeHasChanged(int severity){
+	if(severity >= NUM_SEVERITIES)
+		return false;
+
 	time_t now = time(NULL);
 	struct ::tm tm_now;
 	localtime_r(&now, &tm_now);
 
 	int offset = 0;
 	if(0 == FLAGS_logsplittype || 0 == FLAGS_logsplitvalue){
-		g_current_time = now;
+		g_current_time[severity] = now;
 		return false;
 	}else if(1 == FLAGS_logsplittype){
 		//min
@@ -270,11 +273,11 @@ bool TimeHasChanged(){
 		offset = 24 * 60 * 60 * FLAGS_logsplitvalue;
 	}
 	now = mktime(&tm_now);
-	if(0 == offset || now - g_current_time < offset){
+	if(0 == offset || now - g_current_time[severity] < offset){
 		return false;
 	}
 
-	g_current_time = now;
+	g_current_time[severity] = now;
 	return true;
 }
 

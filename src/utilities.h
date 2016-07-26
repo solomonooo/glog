@@ -161,8 +161,8 @@ WallTime WallTime_Now();
 int32 GetMainThreadPid();
 bool PidHasChanged();
 
-time_t GetCurrentSplitTime();
-bool TimeHasChanged();
+time_t GetCurrentSplitTime(int severity);
+bool TimeHasChanged(int severity);
 
 pid_t GetTID();
 
